@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS news_events;
+DROP TABLE IF EXISTS price_ticks;
+DROP TABLE IF EXISTS transactions;
+DROP TABLE IF EXISTS holdings;
+DROP TABLE IF EXISTS index_components;
+DROP TABLE IF EXISTS cards;
+DROP TABLE IF EXISTS users;

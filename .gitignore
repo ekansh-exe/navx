@@ -1,0 +1,14 @@
+# Go
+/navx
+*.exe
+*.test
+
+# Env
+.env
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Editor/OS
+.DS_Store
