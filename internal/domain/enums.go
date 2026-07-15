@@ -1,5 +1,15 @@
 package domain
 
+// UserType distinguishes human players from bot personas (§2). Bots are real
+// rows in the users table and trade through the same trade-execution path as
+// humans — no special-cased shortcut (§4.5).
+type UserType string
+
+const (
+	UserTypeHuman UserType = "HUMAN"
+	UserTypeBot   UserType = "BOT"
+)
+
 // CardType distinguishes system companies, the NAV5 index, and user-created cards (§2).
 type CardType string
 

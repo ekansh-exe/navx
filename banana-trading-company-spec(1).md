@@ -4,11 +4,14 @@
 
 **Branding:** Product name is **NavXchange**. Shorthand/logo mark used throughout the UI (header, favicon, loading states, watermark on charts) is **NavX**. Use "NavXchange" in full on the landing page, auth screens, and page titles; use the "NavX" mark anywhere space is tight (nav bar logo, mobile header, browser tab icon).
 
+**Build strategy:** Monolith first, extract services later. Everything below is written so the logic (domain model, pricing engine, bots, anti-exploit rules) is identical either way — what changes is only how it's packaged. §11 covers both: the monolith structure to build first (get it *working*), and the later extraction into microservices (§11.5) once the monolith is solid and demoable. Don't start the extraction until the monolith passes everything in §13.
+
 **Stack decision:**
-- Backend: Go (chi or Echo router, sqlc or GORM for DB access, PostgreSQL, Redis for caching/pubsub)
+- Backend: Go — a single binary to start (internal packages, not separate processes — see §11.1), PostgreSQL, Redis for caching
 - Frontend: React + TypeScript + Vite, TailwindCSS, WebSockets for live price feed
-- Real-time: WebSocket server for price ticks, leaderboard updates, news feed
-- Deployment target: containerized (Docker), assume Postgres + Redis + Go binary + static frontend
+- Real-time: WebSocket hub inside the same Go binary for price ticks, leaderboard updates, news feed
+- Autonomous market activity: bot personas running as background goroutines that call the same internal trade-execution function real requests use — see §4.5
+- Deployment target: containerized (a single Docker image + Postgres + Redis to start; see §11.5 for the later multi-container step)
 
 ---
 
@@ -24,6 +27,7 @@ Players log in (real account, not anonymous) and start with a fixed amount of vi
 
 **User**
 - id, username, display_name, created_at
+- user_type: `HUMAN` | `BOT` — bot accounts are real rows in this same table and trade through the exact same trading API and ledger as humans (see §4.5); this is what keeps bot activity honest and testable rather than a special-cased shortcut
 - currency_balance (int64, stored in smallest unit — e.g. "cents" of the in-game currency, never float)
 - total_net_worth (derived: cash + holdings valued at current price — recomputed, not stored as source of truth)
 - last_login_at, login_streak_count
@@ -70,6 +74,7 @@ Players log in (real account, not anonymous) and start with a fixed amount of vi
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT UNIQUE NOT NULL,
+    user_type TEXT NOT NULL DEFAULT 'HUMAN' CHECK (user_type IN ('HUMAN','BOT')),
     currency_balance BIGINT NOT NULL DEFAULT 100000 CHECK (currency_balance >= 0),
     login_streak_count INT NOT NULL DEFAULT 0,
     last_login_at TIMESTAMPTZ,
@@ -179,6 +184,23 @@ Every BUY/SELL must:
 
 For `UNLIMITED` cards, "unlimited" should still mean *mintable-on-buy, burnable-on-sell* (like an AMM), not literally infinite pre-existing supply — otherwise price math breaks. Model it as: buying mints new shares into circulation at the current curve price; selling burns them. This is effectively how crypto AMMs work and keeps the same pricing math from §4.1 valid for both supply models.
 
+### 4.5 Market bots — keeping the market alive with nobody playing
+
+A pure server-side `drift_factor` random walk (§4.1) is enough to keep prices *ticking*, but it doesn't produce believable volume, doesn't interact with the anti-exploit systems, and doesn't give you anything interesting to point at in an interview. Instead, run a pool of bot personas (`user_type = BOT` accounts) that place trades through the **same internal trade-execution function** that the HTTP trading handler calls — not a raw database write, not a bypass of any check. In the monolith this is just a Go function call from a background goroutine instead of an HTTP request; if you later extract a Bot Service (§11.5), that internal call becomes a real HTTP/gRPC call to the Ledger & Market Service, but the important property — bots get zero special treatment — holds either way. This is the key design decision: every anti-exploit mechanism in §4.3 is automatically exercised and tested by your own bots before a real player ever hits it.
+
+**Bot personas** (run several concurrently, each with different behavior, so price action looks organic rather than uniform):
+- **Momentum trader**: buys cards that have been trending up over the last N ticks, sells ones trending down — amplifies moves, creates trends.
+- **Contrarian / mean-reversion trader**: buys dips, sells rallies — dampens moves, creates support/resistance-like behavior.
+- **Random walker**: small random buy/sell orders at random intervals, sector-agnostic — pure background noise.
+- **News-reactive trader**: subscribes to the same news events (§9) as the newspaper does, and nudges trades toward/away from the sector a headline affects — this is what makes "flood in Endia" actually feel connected to price action instead of just decorative copy.
+- **Index-tracking bot**: keeps NAV5's actual tradable liquidity healthy by periodically rebalancing toward the index's derived price (§5.2).
+
+**Operational rules:**
+- Bots trade on their own schedule (e.g. a ticker every few seconds per bot, jittered so they don't all fire in lockstep) via background goroutines started from `main`, not tied to whether any human is currently connected, so the market keeps moving 24/7.
+- Bots are still subject to every position cap, fee, and circuit breaker in §4.3. If a bot's strategy would trip a circuit breaker, it backs off like a real trader would — this is a good source of realistic-looking "cooldown" behavior after a big move.
+- Bot balances should be periodically reset/rebalanced (e.g. a nightly job) so a bot's strategy going wrong can't permanently distort a card's price or drain toward one side — treat this as its own scheduled goroutine, logged clearly so you can show "here's how I kept the simulation self-correcting" as a talking point.
+- Exclude `user_type = BOT` rows from the human leaderboard (§8) by default — a leaderboard topped by bots isn't the point. You can optionally expose a separate "market activity" view that's honest about bots being bots, if you want the transparency.
+
 ---
 
 ## 5. Seeded Companies & the NAV5 Index
@@ -286,7 +308,7 @@ POST   /api/cards                 (launch new card)
 GET    /api/cards/{id}/price-history
 
 POST   /api/trades/quote          (non-binding price preview)
-POST   /api/trades/execute        (idempotency-key required)
+POST   /api/trades/execute        (idempotency-key required — used identically by human clients and, once bots are extracted per §11.5, the bot service)
 
 GET    /api/leaderboard
 
@@ -296,25 +318,59 @@ WS     /ws/prices                 (subscribe to live price ticks)
 WS     /ws/news                   (subscribe to live news)
 ```
 
+In the monolith stage, one Go server handles all of this directly. If you later extract services per §11.5, an API Gateway takes over routing these same paths to whichever internal service owns them — the frontend's contract doesn't change either way.
+
 ---
 
-## 11. Go Backend Architecture
+## 11. Backend Architecture — Monolith First, Then Extract
+
+Build this as one Go binary first. Get the whole game correct and playable before introducing any distributed-systems complexity — that's what actually protects the "I don't want any bugs" goal. The microservices story (§11.5) is real and worth doing, but only *after* §11.1–§11.4 are working end to end.
+
+### 11.1 Monolith package layout
 
 ```
-/cmd/server            - main entrypoint
-/internal/domain       - core types (User, Card, Holding, Transaction) - no framework deps
-/internal/engine       - pricing engine, curve math, drift ticker (pure functions, heavily unit tested)
-/internal/store        - Postgres access (sqlc-generated or hand-written, all trade logic uses explicit transactions)
-/internal/api          - HTTP handlers, request/response DTOs, validation
-/internal/ws           - WebSocket hub (price + news broadcast)
-/internal/jobs         - cron-style workers: drift ticker, leaderboard refresh, vesting unlocks
-/migrations            - SQL migrations
+/cmd/server              - main entrypoint: starts the HTTP server, WebSocket hub, and all background goroutines (drift ticker, bot personas, leaderboard refresh, vesting unlocks, daily bot rebalancing)
+/internal/domain         - core types (User, Card, Holding, Transaction) - no framework deps
+/internal/auth           - registration, login, JWT issuance/validation
+/internal/ledger         - the trade-execution function, ledger invariant logic, row-locking — this package is the one every other package calls into for anything money-related, never the other way around
+/internal/engine         - pricing engine, curve math, drift ticker (pure functions, heavily unit tested)
+/internal/bots           - bot personas (§4.5), each calling /internal/ledger's trade-execution function directly, not over HTTP
+/internal/news           - news generation, fictional-country template bank (§9)
+/internal/leaderboard    - net-worth ranking computation, Redis caching
+/internal/store          - Postgres access (sqlc-generated or hand-written, all trade logic uses explicit transactions)
+/internal/api            - HTTP handlers, request/response DTOs, validation — thin: handlers call into the packages above, they don't contain business logic themselves
+/internal/ws             - WebSocket hub (price + news broadcast)
+/migrations              - SQL migrations
 ```
 
-**Concurrency notes for Go specifically:**
-- The price drift ticker and any background jobs should run as separate goroutines started from `main`, coordinated with `context.Context` for clean shutdown.
-- Never share mutable state (like an in-memory "current price") across goroutines without a mutex or channel — either keep price authoritative in Postgres (simplest, recommended) or use a single goroutine "owning" each card's price with channel-based requests if you need in-memory speed.
-- Use `database/sql` transactions with `SELECT ... FOR UPDATE` for every trade — this is Go's tool for the row-locking described in §4.2.
+The `/internal/api` handlers and the `/internal/bots` goroutines should call the exact same `/internal/ledger` functions — that's what preserves the "bots get zero special treatment" property (§4.5) even without a network hop between them. Keep that boundary clean from day one; it's what makes the later extraction (§11.5) mostly a packaging exercise instead of a rewrite.
+
+### 11.2 Concurrency notes for Go specifically
+
+- The price drift ticker and bot goroutines run as separate goroutines started from `main`, coordinated with `context.Context` for clean shutdown.
+- Never share mutable state (like an in-memory "current price") across goroutines without a mutex or channel — keep price authoritative in Postgres (simplest, recommended).
+- Use `database/sql` transactions with `SELECT ... FOR UPDATE` for every trade — this is Go's tool for the row-locking described in §4.2, and it applies identically whether the caller is a human's HTTP request or a bot's goroutine.
+
+### 11.3 Auth, still inside the monolith
+
+Keep it simple here too: one `users` table (§3) holds both credentials and wallet data for now — don't pre-split identity from wallet until you're actually extracting Auth into its own service (§11.5), where that split starts to earn its keep.
+
+### 11.4 Deployment (monolith stage)
+
+One Docker image (the Go binary), plus Postgres and Redis as separate containers in a small `docker-compose.yml`. This is what you deploy first, and it's a completely legitimate, fully-functional resume project on its own — a working real-time trading game with a correct financial ledger and autonomous market bots is a strong showcase even as a single service.
+
+### 11.5 Later: extracting microservices (do this after §13's tests pass on the monolith)
+
+This is the natural "part 2" of the project once the game works — pulling clean internal package boundaries out into real services, which is a much lower-risk way to end up with genuine microservices than starting distributed. The one hard rule guiding what gets split: **anything that touches money stays together.** Splitting the ledger, holdings, and pricing across services would mean a single trade needs a distributed transaction (2PC or a saga) to stay correct — exactly the complexity this whole spec is trying to avoid. "I built it as a modular monolith, then extracted these two services once the boundaries were proven, and deliberately kept the ledger together because splitting it would require distributed transactions" is a genuinely strong thing to say in an interview — probably stronger than "I built 7 microservices," and it's also just more likely to actually work.
+
+**Suggested extraction order** (each one is optional and independent — do as many or as few as you want):
+
+1. **Auth Service** — the easiest first cut. `/internal/auth` becomes its own process with its own `credentials` table; the main app (now "Ledger & Market Service") validates JWTs it trusts but no longer issues.
+2. **Bot Service** — also low-risk to extract, since `/internal/bots` already only calls the ledger's trade-execution function; extracting it means that call becomes a real HTTP/gRPC call to the Ledger & Market Service's public trading API instead of an in-process function call. This is a good one to point at: "bots are just another API client, with zero special access."
+3. **News Service** and **Leaderboard Service** — both natural read-side extractions once you want to introduce an event bus (NATS JetStream is a reasonable choice) so they react to `TradeExecuted`/`CardLaunched` events instead of polling the Ledger & Market database directly.
+4. **Realtime Gateway** — split the WebSocket hub out last, once there's an event bus for it to subscribe to instead of living inside the monolith.
+
+**Data ownership once extracted:** each service that needs persistence gets its own Postgres database (or schema). No service reaches directly into another service's database — cross-service data needs go through the event bus or a synchronous API call. Add an API Gateway in front of everything once there's more than one backend service, so the frontend keeps talking to one stable surface regardless of how many processes are behind it.
 
 ---
 
@@ -340,20 +396,34 @@ WS     /ws/news                   (subscribe to live news)
 - **Property-based tests**: assert the ledger invariant from §2 holds after any sequence of random valid operations (property: sum of all transaction deltas per user == their current balance, always).
 - **Integration tests** on the full trade API path including fee deduction and slippage.
 - **Exploit simulation tests**: explicitly write tests that try to wash-trade, self-deal as a creator, and rapid-fire trade past position caps — assert they're blocked or penalized as designed in §4.3.
+- **Bot-as-client tests**: since bots call the same trade-execution function real requests use (§4.5), a good chunk of load/concurrency testing is just "run the bot goroutines against a test environment and watch the invariant checks" — this doubles as both a bot-behavior test and an extra layer of exploit/concurrency testing for free.
+- **Cross-service contract tests** (once you've done any extraction from §11.5): test against the event schema (`TradeExecuted`, `PriceTick`, etc.) and the API contract directly, so a change in the Ledger & Market Service that silently breaks the News or Leaderboard Service's assumptions gets caught before deploy, not after. Not applicable until you've actually extracted something.
 
 ---
 
 ## 14. Build Order (phases to hand to Opus 4.8, in sequence)
 
-1. **Phase 0 — Schema & skeleton**: migrations (including the 30-company + NAV5 seed data from §5), domain types, empty Go server with health check, empty React app shell with NavXchange/NavX branding placeholders.
-2. **Phase 1 — Core ledger & auth**: registration/login, user creation, currency balance, daily +5 login reward, transaction ledger, the invariant tests from §13. Trading not wired up yet — just prove money can't leak and login/reward logic is correct and idempotent.
-3. **Phase 2 — Pricing engine**: bonding curve math as pure functions + unit tests, no API yet.
-4. **Phase 3 — Trading API**: buy/sell endpoints wired to the engine + ledger, with row-locking and idempotency. Load-test this before moving on.
+### Part A — the monolith (build this first, all the way through)
+
+1. **Phase 0 — Schema & skeleton**: migrations (including the 30-company + NAV5 seed data from §5), domain types, an empty Go server with a health check, an empty React app shell with NavXchange/NavX branding placeholders. *(This is the phase you've already completed.)*
+2. **Phase 1 — Core ledger & auth**: registration/login/JWT (`/internal/auth`), currency balance, daily +5 login reward, transaction ledger (`/internal/ledger`), the invariant tests from §13. Trading not wired up yet — just prove money can't leak and login/reward logic is correct and idempotent.
+3. **Phase 2 — Pricing engine**: bonding curve math as pure functions + unit tests, inside `/internal/engine`, no API yet.
+4. **Phase 3 — Trading API**: buy/sell endpoints wired to the engine + ledger, with row-locking and idempotency. Load-test this before moving on — it's the highest-risk part of the whole system.
 5. **Phase 4 — Card launch flow**: creation, vesting, retained-share logic.
 6. **Phase 5 — Anti-exploit layer**: fees, slippage sizing, position caps, wash-trade detection, circuit breakers.
-7. **Phase 6 — Leaderboard + news**: scheduled jobs, WebSocket broadcast.
-8. **Phase 7 — Retention mechanics**: daily rewards, streaks, quests.
-9. **Phase 8 — Frontend build-out**: all pages against the now-stable API.
-10. **Phase 9 — Exploit simulation test pass + load test pass** before calling it done.
+7. **Phase 6 — Market bots**: the personas from §4.5 as background goroutines calling `/internal/ledger`'s trade-execution function directly, plus the nightly rebalancing job. This phase should also work as a stress test of Phases 3–5 — if a bot can find an exploit, so could a player.
+8. **Phase 7 — News + Leaderboard**: `/internal/news` and `/internal/leaderboard`, scheduled jobs, wired into the WebSocket hub.
+9. **Phase 8 — Realtime Gateway (in-process)**: WebSocket hub (`/internal/ws`) broadcasting price ticks, news, and leaderboard updates to connected clients.
+10. **Phase 9 — Retention mechanics**: daily quests on top of the daily login reward already built in Phase 1.
+11. **Phase 10 — Frontend build-out**: all pages against the now-stable API and WebSocket endpoints.
+12. **Phase 11 — Full-system pass**: exploit simulation tests, load tests, and a full `docker-compose up` (Go binary + Postgres + Redis) before calling the monolith done. **This is a complete, working, deployable game — treat it as done-done, not "done for now."** Ship it, put it on your resume, then decide if you want to keep going.
 
-Hand this document to Opus 4.8 one phase at a time rather than all at once — ask it to fully implement and test each phase before moving to the next. This keeps each unit reviewable and makes it far more likely you end up with something correct.
+### Part B — service extraction (optional, only after Part A is fully working and tested)
+
+13. **Phase 12 — Extract Auth**: pull `/internal/auth` into its own service per §11.5's extraction order, with its own database, communicating via validated JWTs.
+14. **Phase 13 — Extract Bot Service**: pull `/internal/bots` into its own service per §11.5, switching its internal function calls to real HTTP/gRPC calls against the Ledger & Market Service's public trading API.
+15. **Phase 14 — Introduce an event bus + extract News/Leaderboard**: add NATS JetStream, publish `TradeExecuted`/`CardLaunched`/`CircuitBreakerTripped` events from the Ledger & Market Service, extract News and Leaderboard to subscribe to them instead of polling.
+16. **Phase 15 — Extract the Realtime Gateway and add an API Gateway**: WebSocket hub becomes its own service subscribing to the event bus; an API Gateway goes in front of everything so the frontend's contract stays unchanged.
+17. **Phase 16 — Cross-service contract tests + full multi-container `docker-compose up`** covering every extracted service.
+
+Hand this document to Opus 4.8 one phase at a time rather than all at once — ask it to fully implement and test each phase before moving to the next. Don't start Part B until Part A's Phase 11 is genuinely passing; extracting services from something that doesn't work yet just gives you a distributed version of the same bugs.

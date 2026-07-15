@@ -12,6 +12,7 @@ import (
 type User struct {
 	ID               uuid.UUID
 	Username         string
+	UserType         UserType
 	CurrencyBalance  int64 // smallest currency unit, never negative
 	LoginStreakCount int
 	LastLoginAt      *time.Time

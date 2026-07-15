@@ -1,0 +1,2 @@
+ALTER TABLE users
+    ADD COLUMN user_type TEXT NOT NULL DEFAULT 'HUMAN' CHECK (user_type IN ('HUMAN','BOT'));

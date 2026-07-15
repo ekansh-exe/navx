@@ -12,7 +12,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ekansh-exe/navx/internal/api"
+	"github.com/ekansh-exe/navx/internal/auth"
+	"github.com/ekansh-exe/navx/internal/ledger"
 )
+
+const jwtTTL = 24 * time.Hour
 
 func main() {
 	port := os.Getenv("PORT")
@@ -25,6 +31,11 @@ func main() {
 		log.Fatal("DATABASE_URL is required")
 	}
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET is required")
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -34,8 +45,18 @@ func main() {
 	}
 	defer pool.Close()
 
+	ledgerSvc := ledger.New(pool)
+	authSvc := auth.NewService(pool, ledgerSvc, []byte(jwtSecret), jwtTTL)
+	apiHandler := api.NewHandler(authSvc)
+
 	r := chi.NewRouter()
 	r.Get("/health", healthHandler(pool))
+	r.Post("/api/auth/register", apiHandler.Register)
+	r.Post("/api/auth/login", apiHandler.Login)
+	r.Group(func(r chi.Router) {
+		r.Use(api.RequireAuth([]byte(jwtSecret)))
+		r.Get("/api/users/me", apiHandler.Me)
+	})
 
 	srv := &http.Server{
 		Addr:    ":" + port,
