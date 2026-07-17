@@ -31,7 +31,8 @@ func testRouter(t *testing.T) (chi.Router, *pgxpool.Pool) {
 	t.Cleanup(pool.Close)
 
 	secret := []byte("test-secret")
-	h := NewHandler(auth.NewService(pool, ledger.New(pool), secret, time.Hour))
+	ledgerSvc := ledger.New(pool)
+	h := NewHandler(auth.NewService(pool, ledgerSvc, secret, time.Hour), ledgerSvc)
 
 	r := chi.NewRouter()
 	r.Post("/api/auth/register", h.Register)
@@ -39,6 +40,8 @@ func testRouter(t *testing.T) (chi.Router, *pgxpool.Pool) {
 	r.Group(func(r chi.Router) {
 		r.Use(RequireAuth(secret))
 		r.Get("/api/users/me", h.Me)
+		r.Post("/api/trades/quote", h.Quote)
+		r.Post("/api/trades/execute", h.ExecuteTrade)
 	})
 	return r, pool
 }

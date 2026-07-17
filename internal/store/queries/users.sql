@@ -19,3 +19,9 @@ SET currency_balance = currency_balance + $2,
     login_streak_count = $4
 WHERE id = $1
 RETURNING *;
+
+-- name: ApplyBalanceDelta :one
+UPDATE users
+SET currency_balance = currency_balance + $2
+WHERE id = $1
+RETURNING *;

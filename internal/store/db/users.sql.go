@@ -12,6 +12,34 @@ import (
 	"github.com/google/uuid"
 )
 
+const applyBalanceDelta = `-- name: ApplyBalanceDelta :one
+UPDATE users
+SET currency_balance = currency_balance + $2
+WHERE id = $1
+RETURNING id, username, currency_balance, login_streak_count, last_login_at, created_at, user_type, password_hash
+`
+
+type ApplyBalanceDeltaParams struct {
+	ID              uuid.UUID
+	CurrencyBalance int64
+}
+
+func (q *Queries) ApplyBalanceDelta(ctx context.Context, arg ApplyBalanceDeltaParams) (User, error) {
+	row := q.db.QueryRow(ctx, applyBalanceDelta, arg.ID, arg.CurrencyBalance)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.CurrencyBalance,
+		&i.LoginStreakCount,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UserType,
+		&i.PasswordHash,
+	)
+	return i, err
+}
+
 const applyDailyReward = `-- name: ApplyDailyReward :one
 UPDATE users
 SET currency_balance = currency_balance + $2,

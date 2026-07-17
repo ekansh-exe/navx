@@ -11,14 +11,15 @@ import (
 // must go through this one path; user.currency_balance must always equal the
 // sum of a user's transaction deltas.
 type Transaction struct {
-	ID                 uuid.UUID
-	UserID             uuid.UUID
-	CardID             *uuid.UUID
-	Type               TransactionType
-	Shares             *int64
-	PricePerShare      *int64
-	TotalCurrencyDelta int64
-	ResultingBalance   int64
-	IdempotencyKey     *string
-	CreatedAt          time.Time
+	ID                   uuid.UUID
+	UserID               uuid.UUID
+	CardID               *uuid.UUID
+	Type                 TransactionType
+	Shares               *int64
+	PricePerShare        *int64
+	TotalCurrencyDelta   int64
+	ResultingBalance     int64
+	IdempotencyKey       *string
+	RelatedTransactionID *uuid.UUID // links a FEE row to the trade row it was deducted from
+	CreatedAt            time.Time
 }

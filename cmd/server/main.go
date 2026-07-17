@@ -47,7 +47,7 @@ func main() {
 
 	ledgerSvc := ledger.New(pool)
 	authSvc := auth.NewService(pool, ledgerSvc, []byte(jwtSecret), jwtTTL)
-	apiHandler := api.NewHandler(authSvc)
+	apiHandler := api.NewHandler(authSvc, ledgerSvc)
 
 	r := chi.NewRouter()
 	r.Get("/health", healthHandler(pool))
@@ -56,6 +56,8 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(api.RequireAuth([]byte(jwtSecret)))
 		r.Get("/api/users/me", apiHandler.Me)
+		r.Post("/api/trades/quote", apiHandler.Quote)
+		r.Post("/api/trades/execute", apiHandler.ExecuteTrade)
 	})
 
 	srv := &http.Server{

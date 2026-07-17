@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ekansh-exe/navx/internal/domain"
 	"github.com/ekansh-exe/navx/internal/store/db"
 )
 
@@ -57,6 +58,37 @@ func createTestUser(t *testing.T, pool *pgxpool.Pool, username string) uuid.UUID
 func uniqueUsername(prefix string) string {
 	return prefix + "_" + uuid.NewString()[:8]
 }
+
+func uniqueSymbol(prefix string) string {
+	return prefix + "_" + uuid.NewString()[:8]
+}
+
+// createTestCard inserts a dedicated, isolated test card (never a shared
+// seeded company) so trade tests can't interfere with each other or with
+// other tests running concurrently.
+func createTestCard(t *testing.T, pool *pgxpool.Pool, symbol string, supplyModel domain.SupplyModel, totalSupply *int64, circulatingSupply int64, basePrice, scale float64, status domain.CardStatus) uuid.UUID {
+	t.Helper()
+	ctx := context.Background()
+	var id uuid.UUID
+	err := pool.QueryRow(ctx, `
+		INSERT INTO cards (card_type, symbol, name, supply_model, total_supply, circulating_supply, base_price, scale, current_price, status)
+		VALUES ('SYSTEM_COMPANY', $1, $1, $2, $3, $4, $5, $6, 1, $7)
+		RETURNING id`,
+		symbol, string(supplyModel), totalSupply, circulatingSupply, basePrice, scale, string(status),
+	).Scan(&id)
+	if err != nil {
+		t.Fatalf("create test card: %v", err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		pool.Exec(cleanupCtx, "DELETE FROM holdings WHERE card_id = $1", id)
+		pool.Exec(cleanupCtx, "DELETE FROM transactions WHERE card_id = $1", id)
+		pool.Exec(cleanupCtx, "DELETE FROM cards WHERE id = $1", id)
+	})
+	return id
+}
+
+func ptrInt64(v int64) *int64 { return &v }
 
 // assertInvariant checks §2's non-negotiable invariant: balance always
 // equals initialBalance plus the sum of the user's transaction deltas, and

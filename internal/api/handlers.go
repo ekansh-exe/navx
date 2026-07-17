@@ -10,13 +10,15 @@ import (
 )
 
 // Handler holds thin HTTP handlers (§11.1) — all business logic lives in
-// /internal/auth; handlers only decode requests, call it, and encode responses.
+// /internal/auth and /internal/ledger; handlers only decode requests, call
+// them, and encode responses.
 type Handler struct {
-	auth *auth.Service
+	auth   *auth.Service
+	ledger *ledger.Ledger
 }
 
-func NewHandler(authSvc *auth.Service) *Handler {
-	return &Handler{auth: authSvc}
+func NewHandler(authSvc *auth.Service, ledgerSvc *ledger.Ledger) *Handler {
+	return &Handler{auth: authSvc, ledger: ledgerSvc}
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {

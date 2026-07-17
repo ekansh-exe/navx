@@ -14,21 +14,22 @@ import (
 const createTransaction = `-- name: CreateTransaction :one
 INSERT INTO transactions (
     user_id, card_id, type, shares, price_per_share,
-    total_currency_delta, resulting_balance, idempotency_key
+    total_currency_delta, resulting_balance, idempotency_key, related_transaction_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, user_id, card_id, type, shares, price_per_share, total_currency_delta, resulting_balance, idempotency_key, created_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, user_id, card_id, type, shares, price_per_share, total_currency_delta, resulting_balance, idempotency_key, created_at, related_transaction_id
 `
 
 type CreateTransactionParams struct {
-	UserID             uuid.UUID
-	CardID             *uuid.UUID
-	Type               string
-	Shares             *int64
-	PricePerShare      *int64
-	TotalCurrencyDelta int64
-	ResultingBalance   int64
-	IdempotencyKey     *string
+	UserID               uuid.UUID
+	CardID               *uuid.UUID
+	Type                 string
+	Shares               *int64
+	PricePerShare        *int64
+	TotalCurrencyDelta   int64
+	ResultingBalance     int64
+	IdempotencyKey       *string
+	RelatedTransactionID *uuid.UUID
 }
 
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error) {
@@ -41,6 +42,7 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		arg.TotalCurrencyDelta,
 		arg.ResultingBalance,
 		arg.IdempotencyKey,
+		arg.RelatedTransactionID,
 	)
 	var i Transaction
 	err := row.Scan(
@@ -54,12 +56,36 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 		&i.ResultingBalance,
 		&i.IdempotencyKey,
 		&i.CreatedAt,
+		&i.RelatedTransactionID,
+	)
+	return i, err
+}
+
+const getRelatedFeeTransaction = `-- name: GetRelatedFeeTransaction :one
+SELECT id, user_id, card_id, type, shares, price_per_share, total_currency_delta, resulting_balance, idempotency_key, created_at, related_transaction_id FROM transactions WHERE related_transaction_id = $1 AND type = 'FEE'
+`
+
+func (q *Queries) GetRelatedFeeTransaction(ctx context.Context, relatedTransactionID *uuid.UUID) (Transaction, error) {
+	row := q.db.QueryRow(ctx, getRelatedFeeTransaction, relatedTransactionID)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CardID,
+		&i.Type,
+		&i.Shares,
+		&i.PricePerShare,
+		&i.TotalCurrencyDelta,
+		&i.ResultingBalance,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.RelatedTransactionID,
 	)
 	return i, err
 }
 
 const getTransactionByIdempotencyKey = `-- name: GetTransactionByIdempotencyKey :one
-SELECT id, user_id, card_id, type, shares, price_per_share, total_currency_delta, resulting_balance, idempotency_key, created_at FROM transactions WHERE idempotency_key = $1
+SELECT id, user_id, card_id, type, shares, price_per_share, total_currency_delta, resulting_balance, idempotency_key, created_at, related_transaction_id FROM transactions WHERE idempotency_key = $1
 `
 
 func (q *Queries) GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey *string) (Transaction, error) {
@@ -76,12 +102,13 @@ func (q *Queries) GetTransactionByIdempotencyKey(ctx context.Context, idempotenc
 		&i.ResultingBalance,
 		&i.IdempotencyKey,
 		&i.CreatedAt,
+		&i.RelatedTransactionID,
 	)
 	return i, err
 }
 
 const listTransactionsByUser = `-- name: ListTransactionsByUser :many
-SELECT id, user_id, card_id, type, shares, price_per_share, total_currency_delta, resulting_balance, idempotency_key, created_at FROM transactions WHERE user_id = $1 ORDER BY created_at ASC
+SELECT id, user_id, card_id, type, shares, price_per_share, total_currency_delta, resulting_balance, idempotency_key, created_at, related_transaction_id FROM transactions WHERE user_id = $1 ORDER BY created_at ASC
 `
 
 func (q *Queries) ListTransactionsByUser(ctx context.Context, userID uuid.UUID) ([]Transaction, error) {
@@ -104,6 +131,7 @@ func (q *Queries) ListTransactionsByUser(ctx context.Context, userID uuid.UUID) 
 			&i.ResultingBalance,
 			&i.IdempotencyKey,
 			&i.CreatedAt,
+			&i.RelatedTransactionID,
 		); err != nil {
 			return nil, err
 		}

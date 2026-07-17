@@ -25,6 +25,8 @@ type Card struct {
 	CurrentPrice          int64
 	Status                string
 	CreatedAt             time.Time
+	BasePrice             float64
+	Scale                 float64
 }
 
 type Holding struct {
@@ -57,16 +59,17 @@ type PriceTick struct {
 }
 
 type Transaction struct {
-	ID                 uuid.UUID
-	UserID             uuid.UUID
-	CardID             *uuid.UUID
-	Type               string
-	Shares             *int64
-	PricePerShare      *int64
-	TotalCurrencyDelta int64
-	ResultingBalance   int64
-	IdempotencyKey     *string
-	CreatedAt          time.Time
+	ID                   uuid.UUID
+	UserID               uuid.UUID
+	CardID               *uuid.UUID
+	Type                 string
+	Shares               *int64
+	PricePerShare        *int64
+	TotalCurrencyDelta   int64
+	ResultingBalance     int64
+	IdempotencyKey       *string
+	CreatedAt            time.Time
+	RelatedTransactionID *uuid.UUID
 }
 
 type User struct {

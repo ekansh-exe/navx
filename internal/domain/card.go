@@ -19,7 +19,9 @@ type Card struct {
 	TotalSupply           *int64 // nil when SupplyModel is UNLIMITED
 	CirculatingSupply     int64
 	CreatorRetainedShares int64
-	CurrentPrice          int64 // denormalized cache; price engine (Phase 2+) is the source of truth
+	BasePrice             float64 // engine.CurveParams anchor (§4.1) — a pricing parameter, not a currency amount
+	Scale                 float64 // engine.CurveParams anchor (§4.1) — a pricing parameter, not a currency amount
+	CurrentPrice          int64   // denormalized cache; price engine (Phase 2+) is the source of truth
 	Status                CardStatus
 	CreatedAt             time.Time
 }
