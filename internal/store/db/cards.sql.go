@@ -7,12 +7,82 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
+const createUserCard = `-- name: CreateUserCard :one
+INSERT INTO cards (
+    card_type, creator_user_id, symbol, name, description, image_url,
+    supply_model, total_supply, circulating_supply, creator_retained_shares,
+    base_price, scale, current_price, status
+)
+VALUES (
+    'USER_CREATED', $1, $2, $3, $4, $5,
+    $6, $7, $8, $8,
+    $9, $10, $11, 'ACTIVE'
+)
+RETURNING id, creator_user_id, card_type, sector, symbol, name, supply_model, total_supply, circulating_supply, creator_retained_shares, current_price, status, created_at, base_price, scale, description, image_url, creator_retained_shares_sold, circuit_breaker_window_started_at, circuit_breaker_window_start_price, circuit_breaker_halted_until
+`
+
+type CreateUserCardParams struct {
+	CreatorUserID     *uuid.UUID
+	Symbol            string
+	Name              string
+	Description       *string
+	ImageUrl          *string
+	SupplyModel       string
+	TotalSupply       *int64
+	CirculatingSupply int64
+	BasePrice         float64
+	Scale             float64
+	CurrentPrice      int64
+}
+
+func (q *Queries) CreateUserCard(ctx context.Context, arg CreateUserCardParams) (Card, error) {
+	row := q.db.QueryRow(ctx, createUserCard,
+		arg.CreatorUserID,
+		arg.Symbol,
+		arg.Name,
+		arg.Description,
+		arg.ImageUrl,
+		arg.SupplyModel,
+		arg.TotalSupply,
+		arg.CirculatingSupply,
+		arg.BasePrice,
+		arg.Scale,
+		arg.CurrentPrice,
+	)
+	var i Card
+	err := row.Scan(
+		&i.ID,
+		&i.CreatorUserID,
+		&i.CardType,
+		&i.Sector,
+		&i.Symbol,
+		&i.Name,
+		&i.SupplyModel,
+		&i.TotalSupply,
+		&i.CirculatingSupply,
+		&i.CreatorRetainedShares,
+		&i.CurrentPrice,
+		&i.Status,
+		&i.CreatedAt,
+		&i.BasePrice,
+		&i.Scale,
+		&i.Description,
+		&i.ImageUrl,
+		&i.CreatorRetainedSharesSold,
+		&i.CircuitBreakerWindowStartedAt,
+		&i.CircuitBreakerWindowStartPrice,
+		&i.CircuitBreakerHaltedUntil,
+	)
+	return i, err
+}
+
 const getCardByID = `-- name: GetCardByID :one
-SELECT id, creator_user_id, card_type, sector, symbol, name, supply_model, total_supply, circulating_supply, creator_retained_shares, current_price, status, created_at, base_price, scale FROM cards WHERE id = $1
+SELECT id, creator_user_id, card_type, sector, symbol, name, supply_model, total_supply, circulating_supply, creator_retained_shares, current_price, status, created_at, base_price, scale, description, image_url, creator_retained_shares_sold, circuit_breaker_window_started_at, circuit_breaker_window_start_price, circuit_breaker_halted_until FROM cards WHERE id = $1
 `
 
 func (q *Queries) GetCardByID(ctx context.Context, id uuid.UUID) (Card, error) {
@@ -34,12 +104,18 @@ func (q *Queries) GetCardByID(ctx context.Context, id uuid.UUID) (Card, error) {
 		&i.CreatedAt,
 		&i.BasePrice,
 		&i.Scale,
+		&i.Description,
+		&i.ImageUrl,
+		&i.CreatorRetainedSharesSold,
+		&i.CircuitBreakerWindowStartedAt,
+		&i.CircuitBreakerWindowStartPrice,
+		&i.CircuitBreakerHaltedUntil,
 	)
 	return i, err
 }
 
 const getCardForUpdate = `-- name: GetCardForUpdate :one
-SELECT id, creator_user_id, card_type, sector, symbol, name, supply_model, total_supply, circulating_supply, creator_retained_shares, current_price, status, created_at, base_price, scale FROM cards WHERE id = $1 FOR UPDATE
+SELECT id, creator_user_id, card_type, sector, symbol, name, supply_model, total_supply, circulating_supply, creator_retained_shares, current_price, status, created_at, base_price, scale, description, image_url, creator_retained_shares_sold, circuit_breaker_window_started_at, circuit_breaker_window_start_price, circuit_breaker_halted_until FROM cards WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetCardForUpdate(ctx context.Context, id uuid.UUID) (Card, error) {
@@ -61,6 +137,12 @@ func (q *Queries) GetCardForUpdate(ctx context.Context, id uuid.UUID) (Card, err
 		&i.CreatedAt,
 		&i.BasePrice,
 		&i.Scale,
+		&i.Description,
+		&i.ImageUrl,
+		&i.CreatorRetainedSharesSold,
+		&i.CircuitBreakerWindowStartedAt,
+		&i.CircuitBreakerWindowStartPrice,
+		&i.CircuitBreakerHaltedUntil,
 	)
 	return i, err
 }
@@ -68,19 +150,35 @@ func (q *Queries) GetCardForUpdate(ctx context.Context, id uuid.UUID) (Card, err
 const updateCardAfterTrade = `-- name: UpdateCardAfterTrade :one
 UPDATE cards
 SET circulating_supply = $2,
-    current_price = $3
+    current_price = $3,
+    creator_retained_shares_sold = creator_retained_shares_sold + $4,
+    circuit_breaker_window_started_at = $5,
+    circuit_breaker_window_start_price = $6,
+    circuit_breaker_halted_until = $7
 WHERE id = $1
-RETURNING id, creator_user_id, card_type, sector, symbol, name, supply_model, total_supply, circulating_supply, creator_retained_shares, current_price, status, created_at, base_price, scale
+RETURNING id, creator_user_id, card_type, sector, symbol, name, supply_model, total_supply, circulating_supply, creator_retained_shares, current_price, status, created_at, base_price, scale, description, image_url, creator_retained_shares_sold, circuit_breaker_window_started_at, circuit_breaker_window_start_price, circuit_breaker_halted_until
 `
 
 type UpdateCardAfterTradeParams struct {
-	ID                uuid.UUID
-	CirculatingSupply int64
-	CurrentPrice      int64
+	ID                             uuid.UUID
+	CirculatingSupply              int64
+	CurrentPrice                   int64
+	CreatorRetainedSharesSold      int64
+	CircuitBreakerWindowStartedAt  time.Time
+	CircuitBreakerWindowStartPrice int64
+	CircuitBreakerHaltedUntil      *time.Time
 }
 
 func (q *Queries) UpdateCardAfterTrade(ctx context.Context, arg UpdateCardAfterTradeParams) (Card, error) {
-	row := q.db.QueryRow(ctx, updateCardAfterTrade, arg.ID, arg.CirculatingSupply, arg.CurrentPrice)
+	row := q.db.QueryRow(ctx, updateCardAfterTrade,
+		arg.ID,
+		arg.CirculatingSupply,
+		arg.CurrentPrice,
+		arg.CreatorRetainedSharesSold,
+		arg.CircuitBreakerWindowStartedAt,
+		arg.CircuitBreakerWindowStartPrice,
+		arg.CircuitBreakerHaltedUntil,
+	)
 	var i Card
 	err := row.Scan(
 		&i.ID,
@@ -98,6 +196,12 @@ func (q *Queries) UpdateCardAfterTrade(ctx context.Context, arg UpdateCardAfterT
 		&i.CreatedAt,
 		&i.BasePrice,
 		&i.Scale,
+		&i.Description,
+		&i.ImageUrl,
+		&i.CreatorRetainedSharesSold,
+		&i.CircuitBreakerWindowStartedAt,
+		&i.CircuitBreakerWindowStartPrice,
+		&i.CircuitBreakerHaltedUntil,
 	)
 	return i, err
 }

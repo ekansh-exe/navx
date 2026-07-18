@@ -12,21 +12,27 @@ import (
 )
 
 type Card struct {
-	ID                    uuid.UUID
-	CreatorUserID         *uuid.UUID
-	CardType              string
-	Sector                *string
-	Symbol                string
-	Name                  string
-	SupplyModel           string
-	TotalSupply           *int64
-	CirculatingSupply     int64
-	CreatorRetainedShares int64
-	CurrentPrice          int64
-	Status                string
-	CreatedAt             time.Time
-	BasePrice             float64
-	Scale                 float64
+	ID                             uuid.UUID
+	CreatorUserID                  *uuid.UUID
+	CardType                       string
+	Sector                         *string
+	Symbol                         string
+	Name                           string
+	SupplyModel                    string
+	TotalSupply                    *int64
+	CirculatingSupply              int64
+	CreatorRetainedShares          int64
+	CurrentPrice                   int64
+	Status                         string
+	CreatedAt                      time.Time
+	BasePrice                      float64
+	Scale                          float64
+	Description                    *string
+	ImageUrl                       *string
+	CreatorRetainedSharesSold      int64
+	CircuitBreakerWindowStartedAt  time.Time
+	CircuitBreakerWindowStartPrice int64
+	CircuitBreakerHaltedUntil      *time.Time
 }
 
 type Holding struct {

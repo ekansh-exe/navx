@@ -99,7 +99,10 @@ func TestExecuteTrade_SellHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("engine.ExecutionCost: %v", err)
 	}
-	wantFee := computeFee(wantCost)
+	// This sell immediately follows the setup buy (opposite direction,
+	// well within the wash-trade window), so §4.3's wash-trade detection
+	// legitimately flags it — the base fee gets the punitive multiplier.
+	wantFee := int64(math.Round(float64(computeFee(wantCost)) * washTradeFeeMultiplier))
 
 	result, err := l.ExecuteTrade(ctx, TradeParams{
 		UserID: userID, CardID: cardID, Type: domain.TransactionTypeSell, Shares: sellShares, IdempotencyKey: uuid.NewString(),
@@ -135,6 +138,34 @@ func TestExecuteTrade_SellHappyPath(t *testing.T) {
 	}
 
 	assertInvariant(t, q, userID, result.User.CurrencyBalance)
+}
+
+// TestQuote_LargerBuyGetsWorsePricePerShare verifies §4.2.3's slippage
+// sizing: a 1000-share buy integrates further up the bonding curve than a
+// 100-share buy on the same starting supply, so its average price per share
+// must be strictly worse. Uses Quote (non-mutating) so both sizes are
+// compared against the exact same starting state on one card.
+func TestQuote_LargerBuyGetsWorsePricePerShare(t *testing.T) {
+	pool := testPool(t)
+	l := New(pool)
+	ctx := context.Background()
+
+	// A higher base_price keeps the rounded integer price-per-share large
+	// enough at this order size that the comparison isn't lost to rounding.
+	cardID := createTestCard(t, pool, uniqueSymbol("SLIP"), domain.SupplyModelFixed, ptrInt64(1_000_000), 1000, 1000, 1_000_000, domain.CardStatusActive)
+
+	small, err := l.Quote(ctx, QuoteParams{CardID: cardID, Type: domain.TransactionTypeBuy, Shares: 100})
+	if err != nil {
+		t.Fatalf("quote 100 shares: %v", err)
+	}
+	large, err := l.Quote(ctx, QuoteParams{CardID: cardID, Type: domain.TransactionTypeBuy, Shares: 1000})
+	if err != nil {
+		t.Fatalf("quote 1000 shares: %v", err)
+	}
+
+	if large.PricePerShare <= small.PricePerShare {
+		t.Fatalf("1000-share price per share (%d) should be strictly worse (higher) than 100-share price per share (%d)", large.PricePerShare, small.PricePerShare)
+	}
 }
 
 func TestExecuteTrade_InvalidShares(t *testing.T) {

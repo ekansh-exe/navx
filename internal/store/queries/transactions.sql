@@ -19,3 +19,8 @@ WHERE user_id = $1;
 
 -- name: ListTransactionsByUser :many
 SELECT * FROM transactions WHERE user_id = $1 ORDER BY created_at ASC;
+
+-- name: GetLastTradeByUserAndCard :one
+SELECT * FROM transactions
+WHERE user_id = $1 AND card_id = $2 AND type IN ('BUY', 'SELL')
+ORDER BY created_at DESC LIMIT 1;

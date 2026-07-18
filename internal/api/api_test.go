@@ -42,6 +42,7 @@ func testRouter(t *testing.T) (chi.Router, *pgxpool.Pool) {
 		r.Get("/api/users/me", h.Me)
 		r.Post("/api/trades/quote", h.Quote)
 		r.Post("/api/trades/execute", h.ExecuteTrade)
+		r.Post("/api/cards", h.LaunchCard)
 	})
 	return r, pool
 }

@@ -58,6 +58,7 @@ func main() {
 		r.Get("/api/users/me", apiHandler.Me)
 		r.Post("/api/trades/quote", apiHandler.Quote)
 		r.Post("/api/trades/execute", apiHandler.ExecuteTrade)
+		r.Post("/api/cards", apiHandler.LaunchCard)
 	})
 
 	srv := &http.Server{

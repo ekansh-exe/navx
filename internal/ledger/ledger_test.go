@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ekansh-exe/navx/internal/domain"
+	"github.com/ekansh-exe/navx/internal/engine"
 	"github.com/ekansh-exe/navx/internal/store/db"
 )
 
@@ -65,16 +66,25 @@ func uniqueSymbol(prefix string) string {
 
 // createTestCard inserts a dedicated, isolated test card (never a shared
 // seeded company) so trade tests can't interfere with each other or with
-// other tests running concurrently.
+// other tests running concurrently. current_price is computed from the
+// same curve params the card is given (matching the production invariant
+// that current_price == SpotPrice(circulating_supply, curve params) —
+// migration 000005 backfills exactly this for seeded companies) rather than
+// a disconnected placeholder, since Phase 5's circuit breaker now relies on
+// current_price being a real pre-trade baseline.
 func createTestCard(t *testing.T, pool *pgxpool.Pool, symbol string, supplyModel domain.SupplyModel, totalSupply *int64, circulatingSupply int64, basePrice, scale float64, status domain.CardStatus) uuid.UUID {
 	t.Helper()
 	ctx := context.Background()
+	currentPrice, err := engine.SpotPrice(circulatingSupply, engine.CurveParams{BasePrice: basePrice, Scale: scale, DemandModifier: 1, DriftFactor: 1})
+	if err != nil {
+		t.Fatalf("compute starting price: %v", err)
+	}
 	var id uuid.UUID
-	err := pool.QueryRow(ctx, `
+	err = pool.QueryRow(ctx, `
 		INSERT INTO cards (card_type, symbol, name, supply_model, total_supply, circulating_supply, base_price, scale, current_price, status)
-		VALUES ('SYSTEM_COMPANY', $1, $1, $2, $3, $4, $5, $6, 1, $7)
+		VALUES ('SYSTEM_COMPANY', $1, $1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id`,
-		symbol, string(supplyModel), totalSupply, circulatingSupply, basePrice, scale, string(status),
+		symbol, string(supplyModel), totalSupply, circulatingSupply, basePrice, scale, currentPrice, string(status),
 	).Scan(&id)
 	if err != nil {
 		t.Fatalf("create test card: %v", err)

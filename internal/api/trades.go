@@ -85,7 +85,10 @@ func writeTradeError(w http.ResponseWriter, err error) {
 		errors.Is(err, ledger.ErrInsufficientSupply),
 		errors.Is(err, ledger.ErrInsufficientShares),
 		errors.Is(err, ledger.ErrInsufficientBalance),
-		errors.Is(err, ledger.ErrIdempotencyKeyMismatch):
+		errors.Is(err, ledger.ErrIdempotencyKeyMismatch),
+		errors.Is(err, ledger.ErrRetainedSharesLocked),
+		errors.Is(err, ledger.ErrPositionCapExceeded),
+		errors.Is(err, ledger.ErrCircuitBreakerActive):
 		writeError(w, http.StatusConflict, err.Error())
 	default:
 		writeError(w, http.StatusInternalServerError, "internal error")

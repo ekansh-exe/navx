@@ -61,6 +61,36 @@ func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionPa
 	return i, err
 }
 
+const getLastTradeByUserAndCard = `-- name: GetLastTradeByUserAndCard :one
+SELECT id, user_id, card_id, type, shares, price_per_share, total_currency_delta, resulting_balance, idempotency_key, created_at, related_transaction_id FROM transactions
+WHERE user_id = $1 AND card_id = $2 AND type IN ('BUY', 'SELL')
+ORDER BY created_at DESC LIMIT 1
+`
+
+type GetLastTradeByUserAndCardParams struct {
+	UserID uuid.UUID
+	CardID *uuid.UUID
+}
+
+func (q *Queries) GetLastTradeByUserAndCard(ctx context.Context, arg GetLastTradeByUserAndCardParams) (Transaction, error) {
+	row := q.db.QueryRow(ctx, getLastTradeByUserAndCard, arg.UserID, arg.CardID)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CardID,
+		&i.Type,
+		&i.Shares,
+		&i.PricePerShare,
+		&i.TotalCurrencyDelta,
+		&i.ResultingBalance,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.RelatedTransactionID,
+	)
+	return i, err
+}
+
 const getRelatedFeeTransaction = `-- name: GetRelatedFeeTransaction :one
 SELECT id, user_id, card_id, type, shares, price_per_share, total_currency_delta, resulting_balance, idempotency_key, created_at, related_transaction_id FROM transactions WHERE related_transaction_id = $1 AND type = 'FEE'
 `

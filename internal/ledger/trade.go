@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -169,6 +171,8 @@ func (l *Ledger) executeTradeTx(ctx context.Context, params TradeParams) (*Trade
 	defer tx.Rollback(ctx)
 	qtx := l.queries.WithTx(tx)
 
+	now := time.Now().UTC()
+
 	// Lock order is fixed globally across every ledger function that ever
 	// touches more than one of these rows: card, then user, then holdings.
 	// This is what prevents deadlocks between concurrent trades — it must
@@ -179,6 +183,12 @@ func (l *Ledger) executeTradeTx(ctx context.Context, params TradeParams) (*Trade
 		return nil, ErrCardNotFound
 	} else if err != nil {
 		return nil, fmt.Errorf("get card for update: %w", err)
+	}
+
+	// Circuit breaker (§4.3): halts both BUY and SELL while active, checked
+	// before anything else so a halted card short-circuits immediately.
+	if card.CircuitBreakerHaltedUntil != nil && now.Before(*card.CircuitBreakerHaltedUntil) {
+		return nil, ErrCircuitBreakerActive
 	}
 
 	// BUY requires an ACTIVE card; SELL is always allowed regardless of
@@ -210,6 +220,31 @@ func (l *Ledger) executeTradeTx(ctx context.Context, params TradeParams) (*Trade
 		return nil, ErrInsufficientShares
 	}
 
+	// Position cap (§4.3): BUY-only, since selling only ever reduces a
+	// position and can never breach a max-ownership cap.
+	if params.Type == domain.TransactionTypeBuy {
+		newSharesOwned := sharesOwned + deltaShares
+		if positionCapBreached(newSharesOwned, newSupply) {
+			return nil, ErrPositionCapExceeded
+		}
+	}
+
+	// Creator vesting (§4.3, §6 step 5): if the seller is this card's
+	// creator, cap how much of their still-restricted retained allocation
+	// they can sell right now — tighter than the general ownership check
+	// above whenever the card hasn't fully vested yet.
+	var creatorRetainedSharesSoldDelta int64
+	if params.Type == domain.TransactionTypeSell && card.CreatorUserID != nil && *card.CreatorUserID == params.UserID {
+		maxSellable, unlockedFromRestricted := creatorSellLimit(card, sharesOwned, now)
+		if params.Shares > maxSellable {
+			return nil, ErrRetainedSharesLocked
+		}
+		creatorRetainedSharesSoldDelta = params.Shares
+		if creatorRetainedSharesSoldDelta > unlockedFromRestricted {
+			creatorRetainedSharesSoldDelta = unlockedFromRestricted
+		}
+	}
+
 	// No live drift ticker or demand tracking exists yet (later phases), so
 	// both modifiers stay neutral — every field used here comes from this
 	// single locked read, never a stale pre-lock fetch.
@@ -219,7 +254,17 @@ func (l *Ledger) executeTradeTx(ctx context.Context, params TradeParams) (*Trade
 	if err != nil {
 		return nil, fmt.Errorf("compute execution cost: %w", err)
 	}
-	fee := computeFee(cost)
+
+	// Wash-trade detection (§4.3): a punitive fee multiplier on the flagged
+	// leg rather than outright rejection — it still executes.
+	lastTrade, err := qtx.GetLastTradeByUserAndCard(ctx, db.GetLastTradeByUserAndCardParams{UserID: params.UserID, CardID: &params.CardID})
+	var lastTradePtr *db.Transaction
+	if err == nil {
+		lastTradePtr = &lastTrade
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("get last trade: %w", err)
+	}
+	fee := int64(math.Round(float64(computeFee(cost)) * washTradeMultiplier(lastTradePtr, params.Type, now)))
 
 	// engine.ExecutionCost: positive cost = buyer pays, negative = seller
 	// receives. tradeDelta = -cost correctly debits a buy and credits a
@@ -236,10 +281,29 @@ func (l *Ledger) executeTradeTx(ctx context.Context, params TradeParams) (*Trade
 		return nil, fmt.Errorf("compute new spot price: %w", err)
 	}
 
+	// Circuit breaker (§4.3): decide whether this trade's price move rolls
+	// or trips the rolling window, persisted atomically with the rest of
+	// the trade below.
+	windowStartedAt, windowStartPrice, haltedUntil, triggered := nextCircuitBreakerState(
+		card.CircuitBreakerWindowStartedAt, card.CircuitBreakerWindowStartPrice, card.CurrentPrice, newPrice, now,
+	)
+	if triggered {
+		slog.Warn("CIRCUIT_BREAKER_TRIGGERED",
+			"card_id", card.ID,
+			"window_start_price", windowStartPrice,
+			"new_price", newPrice,
+			"halted_until", haltedUntil,
+		)
+	}
+
 	updatedCard, err := qtx.UpdateCardAfterTrade(ctx, db.UpdateCardAfterTradeParams{
-		ID:                params.CardID,
-		CirculatingSupply: newSupply,
-		CurrentPrice:      newPrice,
+		ID:                             params.CardID,
+		CirculatingSupply:              newSupply,
+		CurrentPrice:                   newPrice,
+		CreatorRetainedSharesSold:      creatorRetainedSharesSoldDelta,
+		CircuitBreakerWindowStartedAt:  windowStartedAt,
+		CircuitBreakerWindowStartPrice: windowStartPrice,
+		CircuitBreakerHaltedUntil:      haltedUntil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("update card: %w", err)
