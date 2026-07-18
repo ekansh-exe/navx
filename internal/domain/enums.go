@@ -46,4 +46,5 @@ const (
 	TransactionTypeCardLaunch  TransactionType = "CARD_LAUNCH"
 	TransactionTypeDailyReward TransactionType = "DAILY_REWARD"
 	TransactionTypeFee         TransactionType = "FEE"
+	TransactionTypeRebalance   TransactionType = "REBALANCE"
 )

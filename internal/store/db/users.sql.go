@@ -163,3 +163,36 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, err
 	)
 	return i, err
 }
+
+const listUsersByType = `-- name: ListUsersByType :many
+SELECT id, username, currency_balance, login_streak_count, last_login_at, created_at, user_type, password_hash FROM users WHERE user_type = $1 ORDER BY username
+`
+
+func (q *Queries) ListUsersByType(ctx context.Context, userType string) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersByType, userType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.CurrencyBalance,
+			&i.LoginStreakCount,
+			&i.LastLoginAt,
+			&i.CreatedAt,
+			&i.UserType,
+			&i.PasswordHash,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

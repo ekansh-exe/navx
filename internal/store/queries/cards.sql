@@ -1,6 +1,9 @@
 -- name: GetCardByID :one
 SELECT * FROM cards WHERE id = $1;
 
+-- name: ListActiveCards :many
+SELECT * FROM cards WHERE status = 'ACTIVE' ORDER BY symbol;
+
 -- name: GetCardForUpdate :one
 SELECT * FROM cards WHERE id = $1 FOR UPDATE;
 

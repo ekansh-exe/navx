@@ -5,20 +5,25 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/ekansh-exe/navx/internal/auth"
 	"github.com/ekansh-exe/navx/internal/ledger"
+	"github.com/ekansh-exe/navx/internal/news"
 )
 
 // Handler holds thin HTTP handlers (§11.1) — all business logic lives in
-// /internal/auth and /internal/ledger; handlers only decode requests, call
-// them, and encode responses.
+// /internal/auth, /internal/ledger, /internal/news, and /internal/leaderboard;
+// handlers only decode requests, call them, and encode responses.
 type Handler struct {
-	auth   *auth.Service
-	ledger *ledger.Ledger
+	auth        *auth.Service
+	ledger      *ledger.Ledger
+	newsReader  *news.Reader
+	redisClient *redis.Client
 }
 
-func NewHandler(authSvc *auth.Service, ledgerSvc *ledger.Ledger) *Handler {
-	return &Handler{auth: authSvc, ledger: ledgerSvc}
+func NewHandler(authSvc *auth.Service, ledgerSvc *ledger.Ledger, newsReader *news.Reader, redisClient *redis.Client) *Handler {
+	return &Handler{auth: authSvc, ledger: ledgerSvc, newsReader: newsReader, redisClient: redisClient}
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {

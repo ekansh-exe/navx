@@ -13,9 +13,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/ekansh-exe/navx/internal/auth"
 	"github.com/ekansh-exe/navx/internal/ledger"
+	"github.com/ekansh-exe/navx/internal/news"
 )
 
 func testRouter(t *testing.T) (chi.Router, *pgxpool.Pool) {
@@ -30,13 +32,18 @@ func testRouter(t *testing.T) (chi.Router, *pgxpool.Pool) {
 	}
 	t.Cleanup(pool.Close)
 
+	redisClient := testRedisClient(t)
+
 	secret := []byte("test-secret")
 	ledgerSvc := ledger.New(pool)
-	h := NewHandler(auth.NewService(pool, ledgerSvc, secret, time.Hour), ledgerSvc)
+	newsReader := news.NewReader(pool)
+	h := NewHandler(auth.NewService(pool, ledgerSvc, secret, time.Hour), ledgerSvc, newsReader, redisClient)
 
 	r := chi.NewRouter()
 	r.Post("/api/auth/register", h.Register)
 	r.Post("/api/auth/login", h.Login)
+	r.Get("/api/news", h.ListNews)
+	r.Get("/api/leaderboard", h.Leaderboard)
 	r.Group(func(r chi.Router) {
 		r.Use(RequireAuth(secret))
 		r.Get("/api/users/me", h.Me)
@@ -45,6 +52,27 @@ func testRouter(t *testing.T) (chi.Router, *pgxpool.Pool) {
 		r.Post("/api/cards", h.LaunchCard)
 	})
 	return r, pool
+}
+
+// testRedisClient mirrors the DATABASE_URL skip pattern above for Redis.
+func testRedisClient(t *testing.T) *redis.Client {
+	t.Helper()
+	addr := os.Getenv("REDIS_URL")
+	if addr == "" {
+		addr = "redis://localhost:6379"
+	}
+	opts, err := redis.ParseURL(addr)
+	if err != nil {
+		t.Fatalf("parse REDIS_URL: %v", err)
+	}
+	client := redis.NewClient(opts)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx).Err(); err != nil {
+		t.Skip("redis not reachable, skipping integration test")
+	}
+	t.Cleanup(func() { client.Close() })
+	return client
 }
 
 func doJSON(t *testing.T, r http.Handler, method, path string, body any) *httptest.ResponseRecorder {

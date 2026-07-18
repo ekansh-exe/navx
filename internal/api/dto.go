@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ekansh-exe/navx/internal/domain"
+	"github.com/ekansh-exe/navx/internal/leaderboard"
 )
 
 type registerRequest struct {
@@ -156,4 +157,52 @@ type launchCardResponse struct {
 	Card        cardDTO        `json:"card"`
 	Transaction transactionDTO `json:"transaction"`
 	User        userDTO        `json:"user"`
+}
+
+type newsEventDTO struct {
+	ID            uuid.UUID  `json:"id"`
+	Headline      string     `json:"headline"`
+	Body          *string    `json:"body"`
+	Category      *string    `json:"category"`
+	RelatedCardID *uuid.UUID `json:"related_card_id"`
+	CreatedAt     time.Time  `json:"created_at"`
+}
+
+func toNewsEventDTO(n *domain.NewsEvent) newsEventDTO {
+	return newsEventDTO{
+		ID:            n.ID,
+		Headline:      n.Headline,
+		Body:          n.Body,
+		Category:      n.Category,
+		RelatedCardID: n.RelatedCardID,
+		CreatedAt:     n.CreatedAt,
+	}
+}
+
+type newsListResponse struct {
+	News   []newsEventDTO `json:"news"`
+	Limit  int32          `json:"limit"`
+	Offset int32          `json:"offset"`
+}
+
+type leaderboardEntryDTO struct {
+	Rank                  int       `json:"rank"`
+	UserID                uuid.UUID `json:"user_id"`
+	Username              string    `json:"username"`
+	NetWorth              int64     `json:"net_worth"`
+	ChangeFromLastRefresh *int64    `json:"change_from_last_refresh,omitempty"`
+}
+
+func toLeaderboardEntryDTO(e leaderboard.Entry) leaderboardEntryDTO {
+	return leaderboardEntryDTO{
+		Rank:                  e.Rank,
+		UserID:                e.UserID,
+		Username:              e.Username,
+		NetWorth:              e.NetWorth,
+		ChangeFromLastRefresh: e.ChangeFromLastRefresh,
+	}
+}
+
+type leaderboardResponse struct {
+	Leaderboard []leaderboardEntryDTO `json:"leaderboard"`
 }

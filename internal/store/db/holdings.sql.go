@@ -32,6 +32,35 @@ func (q *Queries) GetHoldingForUpdate(ctx context.Context, arg GetHoldingForUpda
 	return i, err
 }
 
+const listHoldingsByUser = `-- name: ListHoldingsByUser :many
+SELECT user_id, card_id, shares_owned, avg_cost_basis FROM holdings WHERE user_id = $1
+`
+
+func (q *Queries) ListHoldingsByUser(ctx context.Context, userID uuid.UUID) ([]Holding, error) {
+	rows, err := q.db.Query(ctx, listHoldingsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Holding
+	for rows.Next() {
+		var i Holding
+		if err := rows.Scan(
+			&i.UserID,
+			&i.CardID,
+			&i.SharesOwned,
+			&i.AvgCostBasis,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertHolding = `-- name: UpsertHolding :one
 INSERT INTO holdings (user_id, card_id, shares_owned, avg_cost_basis)
 VALUES ($1, $2, $3, $4)

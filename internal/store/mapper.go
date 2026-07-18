@@ -59,3 +59,15 @@ func ToDomainTransaction(t db.Transaction) *domain.Transaction {
 		CreatedAt:            t.CreatedAt,
 	}
 }
+
+// ToDomainNewsEvent maps a store-layer row to the framework-free domain type.
+func ToDomainNewsEvent(n db.NewsEvent) *domain.NewsEvent {
+	return &domain.NewsEvent{
+		ID:            n.ID,
+		Headline:      n.Headline,
+		Body:          n.Body,
+		Category:      n.Category,
+		RelatedCardID: n.RelatedCardID,
+		CreatedAt:     n.CreatedAt,
+	}
+}

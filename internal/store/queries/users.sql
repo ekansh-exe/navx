@@ -6,6 +6,9 @@ RETURNING *;
 -- name: GetUserByUsername :one
 SELECT * FROM users WHERE username = $1;
 
+-- name: ListUsersByType :many
+SELECT * FROM users WHERE user_type = $1 ORDER BY username;
+
 -- name: GetUserByID :one
 SELECT * FROM users WHERE id = $1;
 

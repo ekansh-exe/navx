@@ -1,6 +1,9 @@
 -- name: GetHoldingForUpdate :one
 SELECT * FROM holdings WHERE user_id = $1 AND card_id = $2 FOR UPDATE;
 
+-- name: ListHoldingsByUser :many
+SELECT * FROM holdings WHERE user_id = $1;
+
 -- name: UpsertHolding :one
 INSERT INTO holdings (user_id, card_id, shares_owned, avg_cost_basis)
 VALUES ($1, $2, $3, $4)

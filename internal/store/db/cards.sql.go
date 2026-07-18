@@ -147,6 +147,52 @@ func (q *Queries) GetCardForUpdate(ctx context.Context, id uuid.UUID) (Card, err
 	return i, err
 }
 
+const listActiveCards = `-- name: ListActiveCards :many
+SELECT id, creator_user_id, card_type, sector, symbol, name, supply_model, total_supply, circulating_supply, creator_retained_shares, current_price, status, created_at, base_price, scale, description, image_url, creator_retained_shares_sold, circuit_breaker_window_started_at, circuit_breaker_window_start_price, circuit_breaker_halted_until FROM cards WHERE status = 'ACTIVE' ORDER BY symbol
+`
+
+func (q *Queries) ListActiveCards(ctx context.Context) ([]Card, error) {
+	rows, err := q.db.Query(ctx, listActiveCards)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Card
+	for rows.Next() {
+		var i Card
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatorUserID,
+			&i.CardType,
+			&i.Sector,
+			&i.Symbol,
+			&i.Name,
+			&i.SupplyModel,
+			&i.TotalSupply,
+			&i.CirculatingSupply,
+			&i.CreatorRetainedShares,
+			&i.CurrentPrice,
+			&i.Status,
+			&i.CreatedAt,
+			&i.BasePrice,
+			&i.Scale,
+			&i.Description,
+			&i.ImageUrl,
+			&i.CreatorRetainedSharesSold,
+			&i.CircuitBreakerWindowStartedAt,
+			&i.CircuitBreakerWindowStartPrice,
+			&i.CircuitBreakerHaltedUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateCardAfterTrade = `-- name: UpdateCardAfterTrade :one
 UPDATE cards
 SET circulating_supply = $2,
