@@ -1,0 +1,209 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+
+/*
+  Design System Variables — copied verbatim from DESIGN_SPEC_REFINED.md section 10.
+  Do not rename or restructure without updating the spec first.
+*/
+:root {
+  --bg: #0b1220;
+  --surface: #131c2e;
+  --surface-elevated: #1a2438;
+  --surface-modal: #1e293b;
+  --surface-hover: #24324a;
+
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-pressed: #1e40af;
+
+  --success: #22c55e;
+  --success-hover: #16a34a;
+  --success-tint: rgba(34, 197, 94, 0.12);
+
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-tint: rgba(239, 68, 68, 0.12);
+
+  --warning: #f59e0b;
+  --info: #38bdf8;
+
+  --gold: #fbbf24;
+  --gold-dark: #d97706;
+  --gold-glow: rgba(251, 191, 36, 0.25);
+  --silver: #94a3b8;
+  --bronze: #b45309;
+  --diamond: #60a5fa;
+
+  --text: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-disabled: #64748b;
+
+  --border: #2c3b55;
+
+  --accent-system-company: #2563eb;
+  --accent-nav5: #fbbf24;
+  --accent-nav5-bg-from: #1a2438;
+  --accent-nav5-bg-to: #162033;
+  --accent-user-created: #8b5cf6;
+
+  --radius-card: 10px;
+  --radius-button: 8px;
+  --radius-input: 8px;
+  --radius-modal: 14px;
+
+  --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.18);
+
+  --transition-fast: 150ms;
+  --transition-normal: 220ms;
+  --transition-slow: 300ms;
+
+  --header-height: 68px;
+  --sidebar-width: 296px;
+
+  --grid-gap: 20px;
+  --section-gap: 32px;
+
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  /* shadcn/ui primitive mapping onto the NavXchange palette */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface-elevated);
+  --popover-foreground: var(--text);
+  --primary-foreground: var(--text);
+  --secondary: var(--surface-elevated);
+  --secondary-foreground: var(--text);
+  --muted: var(--surface-elevated);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--surface-hover);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--text);
+  --input: #334155;
+  --ring: var(--primary);
+  --radius: var(--radius-card);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-modal: var(--surface-modal);
+  --color-surface-hover: var(--surface-hover);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-pressed: var(--primary-pressed);
+
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-success-tint: var(--success-tint);
+
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-tint: var(--danger-tint);
+
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+
+  --color-gold: var(--gold);
+  --color-gold-dark: var(--gold-dark);
+  --color-gold-glow: var(--gold-glow);
+  --color-silver: var(--silver);
+  --color-bronze: var(--bronze);
+  --color-diamond: var(--diamond);
+
+  --color-text: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
+
+  --color-border: var(--border);
+
+  --color-accent-system-company: var(--accent-system-company);
+  --color-accent-nav5: var(--accent-nav5);
+  --color-accent-nav5-bg-from: var(--accent-nav5-bg-from);
+  --color-accent-nav5-bg-to: var(--accent-nav5-bg-to);
+  --color-accent-user-created: var(--accent-user-created);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-card: var(--radius-card);
+  --radius-button: var(--radius-button);
+  --radius-input: var(--radius-input);
+  --radius-modal: var(--radius-modal);
+  --radius-lg: var(--radius-card);
+  --radius-md: calc(var(--radius-card) - 2px);
+  --radius-sm: calc(var(--radius-card) - 4px);
+
+  --shadow-hover: var(--shadow-hover);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --spacing-header: var(--header-height);
+  --spacing-sidebar: var(--sidebar-width);
+  --spacing-grid-gap: var(--grid-gap);
+  --spacing-section-gap: var(--section-gap);
+
+  /* DESIGN_SPEC_REFINED.md section 6/8: quest completion is one of the few
+     things allowed to animate — scale + gold pulse, 250ms, no confetti. */
+  --animate-quest-complete: quest-complete 250ms ease-out;
+}
+
+@keyframes quest-complete {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow: 0 0 24px var(--gold-glow);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-bg text-text font-sans antialiased;
+  }
+
+  .font-mono {
+    font-feature-settings: "tnum" 1, "zero" 1;
+  }
+}
