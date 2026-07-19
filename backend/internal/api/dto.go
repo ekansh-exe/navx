@@ -218,6 +218,26 @@ type leaderboardResponse struct {
 	Leaderboard []leaderboardEntryDTO `json:"leaderboard"`
 }
 
+type holdingDTO struct {
+	CardID        uuid.UUID  `json:"card_id"`
+	SharesOwned   int64      `json:"shares_owned"`
+	AvgCostBasis  int64      `json:"avg_cost_basis"`
+	FirstBoughtAt *time.Time `json:"first_bought_at"`
+}
+
+func toHoldingDTO(h *domain.Holding) holdingDTO {
+	return holdingDTO{
+		CardID:        h.CardID,
+		SharesOwned:   h.SharesOwned,
+		AvgCostBasis:  h.AvgCostBasis,
+		FirstBoughtAt: h.FirstBoughtAt,
+	}
+}
+
+type holdingsResponse struct {
+	Holdings []holdingDTO `json:"holdings"`
+}
+
 type questDTO struct {
 	ID             uuid.UUID `json:"id"`
 	Title          string    `json:"title"`

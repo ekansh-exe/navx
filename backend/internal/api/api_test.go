@@ -46,9 +46,12 @@ func testRouter(t *testing.T) (chi.Router, *pgxpool.Pool) {
 	r.Post("/api/auth/login", h.Login)
 	r.Get("/api/news", h.ListNews)
 	r.Get("/api/leaderboard", h.Leaderboard)
+	r.Get("/api/cards", h.ListCards)
+	r.Get("/api/cards/{id}", h.GetCard)
 	r.Group(func(r chi.Router) {
 		r.Use(RequireAuth(secret))
 		r.Get("/api/users/me", h.Me)
+		r.Get("/api/users/me/holdings", h.Holdings)
 		r.Post("/api/trades/quote", h.Quote)
 		r.Post("/api/trades/execute", h.ExecuteTrade)
 		r.Post("/api/cards", h.LaunchCard)

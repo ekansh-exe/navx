@@ -19,6 +19,17 @@ func ToDomainUser(u db.User) *domain.User {
 	}
 }
 
+// ToDomainHolding maps a store-layer row to the framework-free domain type.
+func ToDomainHolding(h db.Holding) *domain.Holding {
+	return &domain.Holding{
+		UserID:        h.UserID,
+		CardID:        h.CardID,
+		SharesOwned:   h.SharesOwned,
+		AvgCostBasis:  h.AvgCostBasis,
+		FirstBoughtAt: h.FirstBoughtAt,
+	}
+}
+
 // ToDomainCard maps a store-layer row to the framework-free domain type.
 func ToDomainCard(c db.Card) *domain.Card {
 	return &domain.Card{

@@ -39,3 +39,25 @@ func (l *Ledger) GetCard(ctx context.Context, id uuid.UUID) (*domain.Card, error
 	}
 	return store.ToDomainCard(card), nil
 }
+
+// ListHoldingsByUser returns the user's current nonzero positions — the read
+// behind GET /api/users/me/holdings. A holdings row survives at 0 shares
+// after a full sell (UpsertHolding never deletes it, since avg_cost_basis and
+// first_bought_at still matter for quests/history), but a closed-out
+// position isn't a "holding" from the portfolio page's perspective, so it's
+// filtered out here rather than pushed onto every caller. A plain unlocked
+// read; no currency effect.
+func (l *Ledger) ListHoldingsByUser(ctx context.Context, userID uuid.UUID) ([]*domain.Holding, error) {
+	rows, err := l.queries.ListHoldingsByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list holdings by user: %w", err)
+	}
+	holdings := make([]*domain.Holding, 0, len(rows))
+	for _, row := range rows {
+		if row.SharesOwned == 0 {
+			continue
+		}
+		holdings = append(holdings, store.ToDomainHolding(row))
+	}
+	return holdings, nil
+}
