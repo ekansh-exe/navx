@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { Header } from "./Header";
 import { Sidebar, MobileNavLinks } from "./Sidebar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { OnboardingModal } from "@/components/onboarding/OnboardingModal";
 import { useUiStore } from "@/stores/uiStore";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ export function AppShell() {
       <Header />
       <Sidebar />
       <MobileNavDrawer />
+      <OnboardingModal />
       <main
         className={cn(
           "pt-header transition-[padding] duration-[220ms] md:pl-16",

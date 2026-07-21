@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useLoginMutation, useRegisterMutation } from "@/hooks/useAuth";
 import { validatePassword, validateUsername } from "@/lib/validation";
 import { ApiRequestError } from "@/api/client";
+import { useOnboardingStore } from "@/stores/onboardingStore";
 
 export function RegisterPage() {
   const [username, setUsername] = useState("");
@@ -16,6 +17,7 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const registerMutation = useRegisterMutation();
   const loginMutation = useLoginMutation();
+  const triggerOnboarding = useOnboardingStore((s) => s.triggerOnboarding);
 
   const isPending = registerMutation.isPending || loginMutation.isPending;
 
@@ -39,7 +41,12 @@ export function RegisterPage() {
         onSuccess: () => {
           loginMutation.mutate(
             { username, password },
-            { onSuccess: () => navigate("/", { replace: true }) }
+            {
+              onSuccess: () => {
+                triggerOnboarding();
+                navigate("/", { replace: true });
+              },
+            }
           );
         },
       }
