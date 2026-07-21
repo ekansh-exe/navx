@@ -35,7 +35,6 @@ export function useTradeQuote(cardId: string | undefined, type: TradeType, share
 
     let cancelled = false;
     const currentRequest = ++requestId.current;
-    let countdownTimer: ReturnType<typeof setInterval> | undefined;
 
     const fetchQuote = async () => {
       setState((s) => ({ ...s, isLoading: true, error: null }));
@@ -43,16 +42,6 @@ export function useTradeQuote(cardId: string | undefined, type: TradeType, share
         const quote = await quoteTrade({ card_id: cardId, type, shares });
         if (cancelled || requestId.current !== currentRequest) return;
         setState({ quote, isLoading: false, error: null, secondsRemaining: QUOTE_TTL_SECONDS });
-
-        countdownTimer = setInterval(() => {
-          setState((s) => {
-            if (s.secondsRemaining <= 1) {
-              fetchQuote();
-              return s;
-            }
-            return { ...s, secondsRemaining: s.secondsRemaining - 1 };
-          });
-        }, 1000);
       } catch (err) {
         if (cancelled || requestId.current !== currentRequest) return;
         const message = err instanceof ApiRequestError ? err.message : "Unable to fetch quote";
@@ -62,10 +51,30 @@ export function useTradeQuote(cardId: string | undefined, type: TradeType, share
 
     const debounceTimer = setTimeout(fetchQuote, DEBOUNCE_MS);
 
+    // One interval for this effect's whole lifetime: ticks the countdown
+    // every second and re-fetches exactly once it hits 0. fetchQuote itself
+    // must never create another interval here: the previous implementation
+    // did (inside its own success branch), reassigning the timer handle
+    // without ever clearing the one it replaced. Each of those leaked
+    // intervals kept ticking forever and independently triggered its own
+    // refetch every ~8s, so the leak compounded (1 -> 2 -> 4 -> 8 concurrent
+    // intervals...) into an unbounded flood of /api/trades/quote requests
+    // against the backend the longer a panel stayed open.
+    const tickTimer = setInterval(() => {
+      setState((s) => {
+        if (s.quote === null) return s; // no active quote yet, nothing to count down
+        if (s.secondsRemaining <= 1) {
+          fetchQuote();
+          return s;
+        }
+        return { ...s, secondsRemaining: s.secondsRemaining - 1 };
+      });
+    }, 1000);
+
     return () => {
       cancelled = true;
       clearTimeout(debounceTimer);
-      if (countdownTimer) clearInterval(countdownTimer);
+      clearInterval(tickTimer);
     };
   }, [cardId, type, shares]);
 
