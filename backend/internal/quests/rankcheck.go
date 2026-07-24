@@ -9,6 +9,7 @@ import (
 
 	"github.com/ekansh-exe/navx/internal/domain"
 	"github.com/ekansh-exe/navx/internal/leaderboard"
+	"github.com/ekansh-exe/navx/internal/safety"
 )
 
 // reachRankQuestThreshold is §7's "reach rank 50 on the leaderboard".
@@ -21,6 +22,8 @@ const reachRankQuestThreshold = 50
 // already excluded from the leaderboard itself (§4.5/§8), so nothing extra
 // is needed here to keep them out of this quest either.
 func (s *Service) CheckRankQuests(ctx context.Context, redisClient *redis.Client) error {
+	defer safety.Recover("quest_rank_check")
+
 	entries, err := leaderboard.ReadCached(ctx, redisClient)
 	if err != nil {
 		return err

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ekansh-exe/navx/internal/domain"
+	"github.com/ekansh-exe/navx/internal/safety"
 )
 
 // holdCardQuestDuration is §7's "hold a card for 24h".
@@ -16,6 +17,8 @@ const holdCardQuestDuration = 24 * time.Hour
 // quest for this period. Safe to call repeatedly — applyProgress no-ops
 // once a user's quest is already completed for the current period.
 func (s *Service) CheckHoldCardQuests(ctx context.Context) error {
+	defer safety.Recover("quest_hold_card_check")
+
 	cutoff := time.Now().UTC().Add(-holdCardQuestDuration)
 	userIDs, err := s.queries.ListHumanUsersWithQualifyingHolding(ctx, &cutoff)
 	if err != nil {

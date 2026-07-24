@@ -137,6 +137,51 @@ func (q *Queries) GetTransactionByIdempotencyKey(ctx context.Context, idempotenc
 	return i, err
 }
 
+const listRecentTradesByUser = `-- name: ListRecentTradesByUser :many
+SELECT id, user_id, card_id, type, shares, price_per_share, total_currency_delta, resulting_balance, idempotency_key, created_at, related_transaction_id FROM transactions
+WHERE user_id = $1 AND type IN ('BUY', 'SELL')
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListRecentTradesByUserParams struct {
+	UserID uuid.UUID
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListRecentTradesByUser(ctx context.Context, arg ListRecentTradesByUserParams) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, listRecentTradesByUser, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transaction
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.CardID,
+			&i.Type,
+			&i.Shares,
+			&i.PricePerShare,
+			&i.TotalCurrencyDelta,
+			&i.ResultingBalance,
+			&i.IdempotencyKey,
+			&i.CreatedAt,
+			&i.RelatedTransactionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTransactionsByUser = `-- name: ListTransactionsByUser :many
 SELECT id, user_id, card_id, type, shares, price_per_share, total_currency_delta, resulting_balance, idempotency_key, created_at, related_transaction_id FROM transactions WHERE user_id = $1 ORDER BY created_at ASC
 `

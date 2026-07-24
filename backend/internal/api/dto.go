@@ -7,6 +7,7 @@ import (
 
 	"github.com/ekansh-exe/navx/internal/domain"
 	"github.com/ekansh-exe/navx/internal/leaderboard"
+	"github.com/ekansh-exe/navx/internal/ledger"
 	"github.com/ekansh-exe/navx/internal/quests"
 )
 
@@ -236,6 +237,26 @@ func toHoldingDTO(h *domain.Holding) holdingDTO {
 
 type holdingsResponse struct {
 	Holdings []holdingDTO `json:"holdings"`
+}
+
+type tradeHistoryEntryDTO struct {
+	Transaction    transactionDTO `json:"transaction"`
+	FeeTransaction transactionDTO `json:"fee_transaction"`
+	Card           cardDTO        `json:"card"`
+}
+
+func toTradeHistoryEntryDTO(e *ledger.TradeHistoryEntry) tradeHistoryEntryDTO {
+	return tradeHistoryEntryDTO{
+		Transaction:    toTransactionDTO(e.Transaction),
+		FeeTransaction: toTransactionDTO(e.FeeTransaction),
+		Card:           toCardDTO(e.Card),
+	}
+}
+
+type tradeHistoryResponse struct {
+	Trades []tradeHistoryEntryDTO `json:"trades"`
+	Limit  int32                  `json:"limit"`
+	Offset int32                  `json:"offset"`
 }
 
 type questDTO struct {

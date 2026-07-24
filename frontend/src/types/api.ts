@@ -196,6 +196,20 @@ export interface LeaderboardResponse {
   leaderboard: LeaderboardEntry[];
 }
 
+// A real, persisted trade — unlike a client-side "this session only" list,
+// this survives a refresh or a fresh login (GET /api/users/me/trades).
+export interface TradeHistoryEntry {
+  transaction: Transaction;
+  fee_transaction: Transaction;
+  card: Card;
+}
+
+export interface TradeHistoryResponse {
+  trades: TradeHistoryEntry[];
+  limit: number;
+  offset: number;
+}
+
 export interface NewsListResponse {
   news: NewsEvent[];
   limit: number;

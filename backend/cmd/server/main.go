@@ -208,6 +208,7 @@ func main() {
 		r.Use(api.RequireAuth([]byte(jwtSecret)))
 		r.Get("/api/users/me", apiHandler.Me)
 		r.Get("/api/users/me/holdings", apiHandler.Holdings)
+		r.Get("/api/users/me/trades", apiHandler.Trades)
 		r.Post("/api/trades/quote", apiHandler.Quote)
 		r.Post("/api/trades/execute", apiHandler.ExecuteTrade)
 		r.Post("/api/cards", apiHandler.LaunchCard)

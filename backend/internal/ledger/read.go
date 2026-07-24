@@ -10,6 +10,7 @@ import (
 
 	"github.com/ekansh-exe/navx/internal/domain"
 	"github.com/ekansh-exe/navx/internal/store"
+	"github.com/ekansh-exe/navx/internal/store/db"
 )
 
 // ListActiveCards returns every ACTIVE card (the ~30 system companies plus the
@@ -60,4 +61,52 @@ func (l *Ledger) ListHoldingsByUser(ctx context.Context, userID uuid.UUID) ([]*d
 		holdings = append(holdings, store.ToDomainHolding(row))
 	}
 	return holdings, nil
+}
+
+// TradeHistoryEntry is one past trade with its paired fee transaction and the
+// card it was against — mirroring TradeResult's shape so a history row and a
+// freshly executed trade render identically on the frontend.
+type TradeHistoryEntry struct {
+	Transaction    *domain.Transaction
+	FeeTransaction *domain.Transaction
+	Card           *domain.Card
+}
+
+// ListRecentTradesByUser returns the user's most recent BUY/SELL trades,
+// newest first — the read behind GET /api/users/me/trades. Every trade
+// always has exactly one paired FEE transaction (see ExecuteTrade) and a
+// non-null CardID, so both lookups below are expected to always succeed; an
+// error here means the ledger's own invariant was violated somewhere; it is
+// not a normal "missing data" case to handle gracefully. A plain unlocked
+// read; no currency effect. limit/offset are the caller's responsibility to
+// bound sanely (the API handler does this).
+func (l *Ledger) ListRecentTradesByUser(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]*TradeHistoryEntry, error) {
+	rows, err := l.queries.ListRecentTradesByUser(ctx, db.ListRecentTradesByUserParams{
+		UserID: userID,
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list recent trades by user: %w", err)
+	}
+
+	entries := make([]*TradeHistoryEntry, len(rows))
+	for i, row := range rows {
+		feeTxn, err := l.queries.GetRelatedFeeTransaction(ctx, &row.ID)
+		if err != nil {
+			return nil, fmt.Errorf("get related fee transaction for trade %s: %w", row.ID, err)
+		}
+
+		card, err := l.queries.GetCardByID(ctx, *row.CardID)
+		if err != nil {
+			return nil, fmt.Errorf("get card for trade %s: %w", row.ID, err)
+		}
+
+		entries[i] = &TradeHistoryEntry{
+			Transaction:    store.ToDomainTransaction(row),
+			FeeTransaction: store.ToDomainTransaction(feeTxn),
+			Card:           store.ToDomainCard(card),
+		}
+	}
+	return entries, nil
 }

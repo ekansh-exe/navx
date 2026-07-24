@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/ekansh-exe/navx/internal/safety"
 	"github.com/ekansh-exe/navx/internal/store/db"
 )
 
@@ -104,6 +105,8 @@ func notify(entries []Entry, observer Observer) {
 // rather than making it vanish. Returns the computed entries on success, or
 // nil if the refresh failed before the cache was updated.
 func refreshOnce(ctx context.Context, queries *db.Queries, redisClient *redis.Client) []Entry {
+	defer safety.Recover("leaderboard_refresh")
+
 	prev, err := ReadCached(ctx, redisClient)
 	if err != nil {
 		slog.Error("LEADERBOARD_REFRESH_ERROR", "step", "read previous cache", "error", err)

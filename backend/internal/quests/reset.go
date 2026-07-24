@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ekansh-exe/navx/internal/safety"
 	"github.com/ekansh-exe/navx/internal/store/db"
 )
 
@@ -33,6 +34,7 @@ func (s *Service) ResetDueQuests(ctx context.Context, now time.Time) (int64, err
 // comments for why this polls rather than firing exactly at midnight.
 func (s *Service) RunResetJob(ctx context.Context, interval time.Duration) {
 	resetOnce := func() {
+		defer safety.Recover("quest_reset")
 		now := time.Now().UTC()
 		n, err := s.ResetDueQuests(ctx, now)
 		if err != nil {

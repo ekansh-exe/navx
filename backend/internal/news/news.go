@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ekansh-exe/navx/internal/domain"
+	"github.com/ekansh-exe/navx/internal/safety"
 	"github.com/ekansh-exe/navx/internal/store"
 	"github.com/ekansh-exe/navx/internal/store/db"
 )
@@ -46,6 +47,8 @@ func Run(ctx context.Context, pool *pgxpool.Pool, interval time.Duration, observ
 // and body are left unset — these are sector-wide macro events, not tied to
 // one card, and only a headline was asked for this phase.
 func generateOnce(ctx context.Context, queries *db.Queries, rng *rand.Rand, observer Observer) {
+	defer safety.Recover("news_generate")
+
 	country := randomCountry(rng)
 	event := randomEventType(rng)
 	sectors := sectorsFor(event)

@@ -53,7 +53,7 @@ export function PortfolioPage() {
       </div>
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold text-text">Recent trades (this session)</h2>
+        <h2 className="text-lg font-semibold text-text">Recent trades</h2>
         <RecentTradesTable />
       </div>
     </div>

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ekansh-exe/navx/internal/ledger"
+	"github.com/ekansh-exe/navx/internal/safety"
 	"github.com/ekansh-exe/navx/internal/store/db"
 )
 
@@ -27,6 +28,8 @@ func RunRebalanceJob(ctx context.Context, ledgerSvc *ledger.Ledger, queries *db.
 }
 
 func rebalanceOnce(ctx context.Context, ledgerSvc *ledger.Ledger, queries *db.Queries) {
+	defer safety.Recover("bot_rebalance")
+
 	botUsers, err := queries.ListUsersByType(ctx, "BOT")
 	if err != nil {
 		slog.Error("BOT_REBALANCE_ERROR", "error", err)

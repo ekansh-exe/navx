@@ -12,6 +12,7 @@ import (
 
 	"github.com/ekansh-exe/navx/internal/domain"
 	"github.com/ekansh-exe/navx/internal/ledger"
+	"github.com/ekansh-exe/navx/internal/safety"
 	"github.com/ekansh-exe/navx/internal/store/db"
 )
 
@@ -83,6 +84,11 @@ func jitteredInterval(rng *rand.Rand) time.Duration {
 // path a human's HTTP request uses. Never panics, never exits the loop:
 // anything that goes wrong is logged and the bot tries again next tick.
 func (b *Bot) tick(ctx context.Context) {
+	// One bot's tick panicking must never crash the other 9 bots, the HTTP
+	// server, or every open WebSocket connection with it — see
+	// internal/safety's doc comment.
+	defer safety.Recover("bot_tick:" + b.Username)
+
 	snapshots, err := fetchSnapshots(ctx, b.queries, b.UserID, b.history)
 	if err != nil {
 		slog.Error("BOT_TICK_ERROR", "bot", b.Username, "persona", b.Persona, "error", err)

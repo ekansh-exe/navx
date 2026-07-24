@@ -7,14 +7,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatShares } from "@/lib/format";
-import { useTradeHistoryStore } from "@/stores/tradeHistoryStore";
+import { useTradeHistory } from "@/hooks/useTradeHistory";
 
-// There's no GET-transactions endpoint anywhere (API_ENDPOINTS.md) — this is
-// this session's own confirmed trades only, labeled honestly rather than
-// implying a full history.
+// Persisted server-side history (GET /api/users/me/trades) — survives a
+// refresh or a fresh login, unlike the old session-only client store.
 export function RecentTradesTable() {
-  const entries = useTradeHistoryStore((s) => s.entries);
+  const { data, isLoading } = useTradeHistory();
+  const entries = data?.trades ?? [];
 
   return (
     <div className="overflow-hidden rounded-card border border-border">
@@ -30,15 +31,24 @@ export function RecentTradesTable() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {entries.length === 0 && (
+          {isLoading &&
+            Array.from({ length: 4 }).map((_, i) => (
+              <TableRow key={i}>
+                <TableCell colSpan={6}>
+                  <Skeleton className="h-5 w-full" />
+                </TableCell>
+              </TableRow>
+            ))}
+
+          {!isLoading && entries.length === 0 && (
             <TableRow>
               <TableCell colSpan={6} className="py-10 text-center text-text-muted">
-                No trades yet this session.
+                No trades yet.
               </TableCell>
             </TableRow>
           )}
 
-          {entries.map(({ transaction, feeTransaction, card }) => (
+          {entries.map(({ transaction, fee_transaction: feeTransaction, card }) => (
             <TableRow key={transaction.id}>
               <TableCell>
                 <div className="flex items-center gap-2">
